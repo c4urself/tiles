@@ -1,103 +1,142 @@
-window.tiles = window.tiles || {
+function Tiler () {}
 
-    init: function () {
-        var $tiles = $('div.tiles > div'),
-            $cells = $('table.grid'),
-            $current;
+Tiler.prototype = {
 
+    current: null,  // current tile
+    time: 400,      // animation time
+    h: 85,          // height
+    w: 150,         // width
+    s: 4,           // spacing
+
+    /**
+     * Finds a cell using a position `n`
+     *
+     */
+    findCell: function (n) {
+        return $('.grid td[data-cell=' + n + ']', this.base);
+    },
+
+    /**
+     * Moves a tile to a cell
+     *
+     */
+    moveToCell: function (tile, position, large) {
+        var that = this,
+            cell = that.findCell(position);
+            atTop = !large && position % 2 !== 0;
+
+        tile.animate({
+            top: cell.offset().top - cell.parent().offset().top + (atTop ? that.h + (that.s * 2) : that.s),
+            left: cell.offset().left - cell.parent().offset().left,
+            height: large ? (that.h * 2) + that.s : that.h,
+            width: large ? (that.w * 2) + that.s * 2: that.w
+        }, this.time);
+
+        tile.data('cell', position);
+        cell.data('tile', tile);
+    },
+
+    /**
+     * Positions tiles initially
+     *
+     */
+    reset: function (n) {
+        var $tiles = $('div.tiles > div', this.base),
+            old = this.time;
+
+        this.time = 0;
         for (var i = 0, d = 1; i < $tiles.length; i++) {
-            var $tile = $tiles.eq(i),
-                $cell = $cells.find('td[data-cell=' + (i + d) + ']');
+            var $tile = $tiles.eq(i);
 
-            $tile.data('cell', i + d);
-            $cell.data('tile', $tile);
-
-            $tile.offset({
-                top: $cell.offset().top,
-                left: $cell.offset().left
-            });
-
-            if (i === 2) {
+            if (i === n) {
+                var x;
+                if (i % 2 !== 0) {
+                    this.moveToCell($tiles.eq(i - 1), i + 4);
+                    x = i;
+                } else {
+                    x = i + d;
+                }
                 d += 3;
-                $tile.height(200);
-                $tile.width(300);
-                $current = $tile;
+                this.moveToCell($tile, x, true);
+                this.current = $tile;
+            } else {
+                this.moveToCell($tile, i + d);
             }
         }
+        this.time = old;
+    },
 
-        console.log($.data('current'));
+    /**
+     * Initialises mouseover event
+     *
+     * Here we calculate 3 positions and get the respective tiles in each
+     * to move them after calculating their new positions.
+     *
+     * - position of the mouseover tile                  x1
+     * - position of the tile right above or below it    x2
+     * - position of the tile to the right or left;
+     *   this is usually the current large tile          x3
+     *
+     */
+    handler: function () {
+        var that = this,
+            $tiles = $('div.tiles > div', this.base);
 
         $tiles.on('mouseover', function (e) {
+
             var $tile = $(e.currentTarget);
 
-            // TODO: current ! always = cx3
-            // TODO: animation
-            // TODO: split placing tile in cell'-functionality into separate method;
+            if (that.current[0] !== $tile[0]) {
 
-            if ($current !== $tile) {
                 var cx1 = $tile.data('cell'),
-                    cx3 = $current.data('cell'),
-                    pos = cx1 % 2 === 0 ? 'bottom' : 'top',
-                    dir = cx3 < cx1 ? 'right' : 'left',
+                    currentPos = that.current.data('cell'),
+                    atTop = cx1 % 2 !== 0,
+                    toLeft = currentPos > cx1,
                     nx1 = cx1,
-                    cx2 = pos === 'bottom' ? cx1 - 1 : cx1 + 1,
-                    nx2 = dir === 'right' ? cx2 - 4 : cx2 + 4,
-                    $x2 = $cells.find('td[data-cell=' + cx2 + ']').data('tile'),
-                    $x3 = $current,
+                    cx2 = atTop ? cx1 + 1 : cx1 - 1,
+                    nx2 = toLeft ? cx2 + 4 : cx2 - 4,
+                    cx3 = toLeft ? cx2 + (atTop ? 1 : 2) : cx2 - (atTop ? 5 : 4),
+                    $x2 = that.findCell(cx2).data('tile'),
+                    $x3 = that.findCell(cx3).data('tile'),
                     nx3 = cx3;
 
-                if (pos === 'bottom') {
+                if (cx3 !== currentPos) {
+                    return that.reset($tile.data('position'));
+                }
+
+                if (!atTop) {
                     nx3 += 1;
                     nx1 -= 1;
                 }
-                if (dir === 'left') {
+
+                if (toLeft) {
                     nx3 += 2;
                 } else {
                     nx1 -= 2;
                 }
 
-                console.log('Current tile pos: ', cx1);
-                console.log('New tile pos: ', nx1);
-                console.log('Position in row: ', pos);
-                console.log('Expand direction: ', dir);
-                console.log('Old x2 pos: ', cx2);
-                console.log('New x2 pos: ', nx2);
-                console.log('Old x3 pos: ', cx3);
-                console.log('New x3 pos: ', nx3);
+                that.moveToCell($tile, nx1, true);
+                that.moveToCell($x3, nx3);
+                that.moveToCell($x2, nx2);
 
-                $current.height(100).width(150);
-                $tile.height(200).width(300);
-
-                var $x1cell = $cells.find('td[data-cell=' + nx1 + ']');
-                $tile.offset({
-                    top: $x1cell.offset().top,
-                    left: $x1cell.offset().left
-                });
-                $tile.data('cell', nx1);
-                $x1cell.data('tile', $tile);
-
-                var $x2cell = $cells.find('td[data-cell=' + nx2 + ']');
-                $x2.offset({
-                    top: $x2cell.offset().top,
-                    left: $x2cell.offset().left
-                });
-                $x2.data('cell', nx2);
-                $x2cell.data('tile', $x2);
-
-                var $x3cell = $cells.find('td[data-cell=' + nx3 + ']');
-                $x3.offset({
-                    top: $cells.find('td[data-cell=' + nx3 + ']').offset().top,
-                    left: $cells.find('td[data-cell=' + nx3 + ']').offset().left
-                });
-                $x3.data('cell', nx3);
-                $x3cell.data('tile', $x3);
-
-                $current = $tile;
+                that.current = $tile;
             }
         });
+    },
+
+    init: function (base) {
+        this.base = base;    // used for scoping jquery calls
+        this.reset(1);       // position tiles, large tile in the middle
+        this.handler();      // handle mouseover event
     }
 };
 
+
 $(document).ready(function () {
-    tiles.init();
+    $('.tiler').each(function () {
+        console.log('Initializing new Tiler');
+        var tiler = new Tiler();
+        tiler.init(this);
+    });
 });
+
